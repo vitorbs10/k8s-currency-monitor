@@ -1,0 +1,185 @@
+---
+# ConfigMap para configuração do PostgreSQL
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  labels:
+    app: postgres
+data:
+  POSTGRES_DB: currency_db
+  POSTGRES_USER: currency_user
+
+---
+# Secret para senha do PostgreSQL
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  labels:
+    app: postgres
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "changeme123"
+  DB_PASSWORD: "changeme123"
+
+---
+# PersistentVolumeClaim para dados do PostgreSQL
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  labels:
+    app: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# StatefulSet do PostgreSQL
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+spec:
+  serviceName: postgres-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16-alpine
+        ports:
+        - containerPort: 5432
+          name: postgres
+        envFrom:
+        - configMapRef:
+            name: postgres-config
+        - secretRef:
+            name: postgres-secret
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+          subPath: postgres
+        - name: init-script
+          mountPath: /docker-entrypoint-initdb.d
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - currency_user
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - currency_user
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+      - name: init-script
+        configMap:
+          name: postgres-init-script
+
+---
+# Service do PostgreSQL
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgres
+
+---
+# ConfigMap com script de inicialização
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-script
+  labels:
+    app: postgres
+data:
+  init.sql: |
+    -- Schema para histórico de taxas de câmbio
+    
+    -- Tabela principal de taxas de câmbio
+    CREATE TABLE IF NOT EXISTS exchange_rates (
+        id SERIAL PRIMARY KEY,
+        currency_code VARCHAR(3) NOT NULL,
+        rate_to_brl DECIMAL(12, 6) NOT NULL,
+        recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        source VARCHAR(50) DEFAULT 'exchangerate-api',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    -- Índices para otimizar consultas
+    CREATE INDEX IF NOT EXISTS idx_exchange_rates_currency ON exchange_rates(currency_code);
+    CREATE INDEX IF NOT EXISTS idx_exchange_rates_recorded_at ON exchange_rates(recorded_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_exchange_rates_currency_date ON exchange_rates(currency_code, recorded_at DESC);
+    
+    -- Tabela para rastrear quando as taxas foram atualizadas
+    CREATE TABLE IF NOT EXISTS rate_updates (
+        id SERIAL PRIMARY KEY,
+        update_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        currencies_updated INTEGER NOT NULL,
+        success BOOLEAN NOT NULL,
+        error_message TEXT
+    );
+    
+    -- View para pegar as taxas mais recentes de cada moeda
+    CREATE OR REPLACE VIEW latest_rates AS
+    SELECT DISTINCT ON (currency_code)
+        id,
+        currency_code,
+        rate_to_brl,
+        recorded_at
+    FROM exchange_rates
+    ORDER BY currency_code, recorded_at DESC;
+    
+    -- View para estatísticas diárias
+    CREATE OR REPLACE VIEW daily_rate_stats AS
+    SELECT 
+        currency_code,
+        DATE(recorded_at) as date,
+        MIN(rate_to_brl) as min_rate,
+        MAX(rate_to_brl) as max_rate,
+        AVG(rate_to_brl) as avg_rate,
+        COUNT(*) as sample_count
+    FROM exchange_rates
+    GROUP BY currency_code, DATE(recorded_at)
+    ORDER BY date DESC, currency_code;
