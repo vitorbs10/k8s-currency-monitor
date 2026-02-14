@@ -1,0 +1,30 @@
+name: CI - Profile README
+
+# Define quando o pipeline será executado
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: # Permite que você rode manualmente pelo site do GitHub
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Faz o download do seu código para a máquina do GitHub
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. Roda um validador de Markdown (evita erros de sintaxe no README)
+      - name: Markdown Linting
+        uses: avto-dev/markdown-lint@v1
+        with:
+          args: './README.md'
+
+      # 3. Verifica se todos os links do seu perfil estão funcionando
+      - name: Check broken links
+        uses: JustinBeckwith/linkinator-action@v1
+        with:
+          paths: 'README.md'
