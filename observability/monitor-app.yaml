@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: monitor-minha-app
+  namespace: default        # Onde sua aplicação está
+  labels:
+    release: prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: currency-converter    # Deve ser IGUAL ao label que está no seu SERVICE
+  endpoints:
+  - port: http              # O nome (name) da porta definido no seu SERVICE
+    path: /metrics          # Onde sua app expõe os dados
+    interval: 30s
