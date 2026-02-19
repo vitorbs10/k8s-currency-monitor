@@ -11,20 +11,17 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
-  steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    # Validando apenas arquivos K8s (ignora docker-compose e outros)
-    - name: Validate Kubernetes Manifests
-      uses: stefanprodan/kube-tools@v1
-      with:
-        command: |
-          # O kubeconform é perfeito para CI pois não precisa de servidor (offline)
-          # Ele vai validar todos os arquivos .yaml que possuem a estrutura de Kubernetes
-          kubeconform -summary -ignore-filename-pattern docker-compose ./currency-converter/
+      - name: Validate Kubernetes Manifests
+        uses: stefanprodan/kube-tools@v1
+        with:
+          command: |
+            kubeconform -summary -ignore-filename-pattern docker-compose ./currency-converter/
 
-    - name: Build Docker Image (Check)
-      run: |
-        cd currency-converter
-        docker build -t currency-monitor-test:latest .
+      - name: Build Docker Image (Check)
+        run: |
+          cd currency-converter
+          docker build -t currency-monitor-test:latest .
