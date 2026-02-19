@@ -1,6 +1,5 @@
 name: CI - K8s Currency Monitor
 
-# Gatilhos: roda em todo push ou pull request na main
 on:
   push:
     branches: [ "main" ]
@@ -12,22 +11,20 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
-    steps:
-      # 1. Baixa o seu código para a máquina do GitHub
-      - name: Checkout Code
-        uses: actions/checkout@v4
+  steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
-      # 2. Valida os arquivos YAML do Kubernetes
-      # Usamos --validate=false para não dar erro de conexão com servidor
-      - name: Validate Kubernetes Manifests
-        uses: stefanprodan/kube-tools@v1
-        with:
-          kubectl: 1.28.0
-          command: |
-            kubectl apply --dry-run=client --validate=false -f ./currency-converter/
+    # Validando apenas arquivos K8s (ignora docker-compose e outros)
+    - name: Validate Kubernetes Manifests
+      uses: stefanprodan/kube-tools@v1
+      with:
+        command: |
+          # O kubeconform é perfeito para CI pois não precisa de servidor (offline)
+          # Ele vai validar todos os arquivos .yaml que possuem a estrutura de Kubernetes
+          kubeconform -summary -ignore-filename-pattern docker-compose ./currency-converter/
 
-      # 3. Tenta buildar a imagem Docker para ver se o Dockerfile está ok
-      - name: Build Docker Image (Check)
-        run: |
-          cd currency-converter
-          docker build -t currency-monitor-test:latest .
+    - name: Build Docker Image (Check)
+      run: |
+        cd currency-converter
+        docker build -t currency-monitor-test:latest .
