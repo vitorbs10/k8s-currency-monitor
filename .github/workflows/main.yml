@@ -24,7 +24,7 @@ jobs:
           command: |
             # Tenta fazer um "dry-run" nos seus arquivos da pasta k8s
             # (Substitua './k8s' pela pasta onde estão seus yamls)
-            kubectl kustomize ./k8s-currency-monitor/currency-converter | kubectl apply --dry-run=client -f -
+              kubectl apply --dry-run=client -f ./currency-converter
 
       # 3. Testa se o Dockerfile está bem construído (sem gerar imagem final)
       - name: Build Docker Image (Dry Run)
