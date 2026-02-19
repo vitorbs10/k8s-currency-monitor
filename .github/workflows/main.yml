@@ -1,30 +1,32 @@
-name: CI - Profile README
+name: CI - K8s Currency Monitor
 
-# Define quando o pipeline será executado
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch: # Permite que você rode manualmente pelo site do GitHub
+  workflow_dispatch:
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Faz o download do seu código para a máquina do GitHub
+      # 1. Baixa o código
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2. Roda um validador de Markdown (evita erros de sintaxe no README)
-      - name: Markdown Linting
-        uses: avto-dev/markdown-lint@v1
+      # 2. Valida se os arquivos do Kubernetes (.yaml) estão corretos
+      - name: Validate Kubernetes Manifests
+        uses: stefanprodan/kube-tools@v1
         with:
-          args: './README.md'
+          kubectl: 1.28.0
+          command: |
+            # Tenta fazer um "dry-run" nos seus arquivos da pasta k8s
+            # (Substitua './k8s' pela pasta onde estão seus yamls)
+            kubectl kustomize ./k8s | kubectl apply --dry-run=client -f -
 
-      # 3. Verifica se todos os links do seu perfil estão funcionando
-      - name: Check broken links
-        uses: JustinBeckwith/linkinator-action@v1
-        with:
-          paths: 'README.md'
+      # 3. Testa se o Dockerfile está bem construído (sem gerar imagem final)
+      - name: Build Docker Image (Dry Run)
+        run: |
+          docker build -t currency-monitor-test .
